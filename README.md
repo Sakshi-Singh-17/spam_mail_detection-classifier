@@ -1,0 +1,225 @@
+# 📧 Spam Email Detection System
+
+> A complete end-to-end prototype that classifies email messages as **SPAM** or **HAM (legitimate)** in real time — built entirely in Python using open-source libraries.
+
+---
+
+## Overview
+
+This project demonstrates a full supervised ML workflow for text classification:
+
+- Dataset loading, inspection, and **deduplication**
+- Text cleaning and TF-IDF feature extraction (no data leakage)
+- Training and comparing three classifiers
+- **Cross-validated model selection** (avoids test-set selection bias)
+- Model persistence with Joblib
+- Live interactive prediction via a Streamlit web app
+
+All predictions come from the real trained ML model — no rule-based logic, no keyword matching, no external AI APIs.
+
+---
+
+## Features
+
+- ✅ Real ML model trained on the provided spam/ham dataset
+- ✅ Three models compared: Logistic Regression, Naive Bayes, Calibrated Linear SVM
+- ✅ Best model selected by **5-fold cross-validated F1** on training data only
+- ✅ Calibrated probabilities for all models (`predict_proba` available on every classifier)
+- ✅ Live SPAM / HAM prediction with confidence percentage
+- ✅ Model performance dashboard (accuracy, precision, recall, F1, CV F1)
+- ✅ Confusion matrix with TP/TN/FP/FN explanation
+- ✅ Class distribution and model comparison visualisations
+- ✅ Light theme enforced via `.streamlit/config.toml`
+- ✅ Reproducible (`random_state=42` throughout)
+- ✅ No data leakage (TF-IDF fitted on training data only; deduplication before splitting)
+
+---
+
+## Known Limitations
+
+> **Read this before a demo or judging.**
+
+1. **Domain mismatch.** The ham emails are almost entirely from the Enron corporate email corpus. The model may have learned corpus-specific tokens (e.g. "enron", "ect", "hou") alongside genuine spam signals. It may not generalise perfectly to modern consumer email. Test your own examples before a demo.
+
+2. **Deduplication.** The dataset contains some duplicate and near-duplicate texts. This version drops exact-text duplicates before splitting, which gives more honest metrics than the original run. Near-duplicates (paraphrased versions) are not removed — full deduplication would require a semantic similarity pass.
+
+3. **Dataset size.** At ~5 000 records (after deduplication), this is a small dataset. Reported F1 scores in the high-90s are plausible for this corpus but should not be extrapolated to production.
+
+4. **No unit tests or deployment config.** This is a prototype. There is no Dockerfile, no input sanitisation beyond empty-string detection, and no CI pipeline.
+
+5. **Confidence calibration.** Logistic Regression and Naive Bayes report calibrated probabilities. The Calibrated Linear SVM uses Platt scaling via `CalibratedClassifierCV`, which provides reasonable (not perfectly calibrated) probabilities.
+
+---
+
+## Machine Learning Workflow
+
+```
+Email Text (raw CSV)
+        ↓
+Deduplication  (drop exact-text duplicates before splitting)
+        ↓
+Text Cleaning  (lowercase, whitespace normalisation)
+        ↓
+Train / Test Split  (80 / 20, stratified)
+        ↓
+TF-IDF Feature Extraction  (fit on TRAIN only — no leakage)
+        ↓
+Train Three Classifiers
+  ├── Logistic Regression
+  ├── Multinomial Naive Bayes
+  └── Calibrated Linear SVM  (CalibratedClassifierCV wrapping LinearSVC)
+        ↓
+5-Fold Cross-Validated F1 on Training Data  (model selection)
+        ↓
+Re-fit Best Model on Full Training Set
+        ↓
+Evaluate on Held-Out Test Set  (honest final metrics)
+        ↓
+Save Model + Vectoriser  →  models/
+        ↓
+Live Spam / Ham Prediction  (Streamlit)
+```
+
+---
+
+## Dataset
+
+The project uses the provided `spam_ham_dataset.csv` file.
+
+| Property | Value |
+|---|---|
+| Raw records | 5 171 |
+| After deduplication | ~5 050 (varies on run) |
+| Ham (0) | majority |
+| Spam (1) | minority |
+| Columns used | `text`, `label_num` |
+| Unnamed index column | present in CSV; ignored |
+
+**Domain note:** Ham emails are drawn from the Enron corporate email corpus. Spam emails are from a separate collection. The model may learn some corpus-specific tokens in addition to genuine spam signals. See Limitations above.
+
+No external datasets, synthetic data, or internet scraping were used.
+
+---
+
+## Technologies Used
+
+| Library | Version | Purpose |
+|---|---|---|
+| Python 3 | — | Core language |
+| Pandas | 2.3.3 | Data loading & cleaning |
+| NumPy | 2.4.3 | Numerical operations |
+| Scikit-learn | 1.9.1 | TF-IDF, ML models, calibration, metrics |
+| Matplotlib | 3.10.9 | Visualisations |
+| Streamlit | 1.57.0 | Web app UI |
+| Joblib | 1.6.0 | Model serialisation |
+
+---
+
+## Project Structure
+
+```
+spam-email-detector/
+│
+├── app.py                      ← Streamlit web application
+├── train_model.py              ← Full training pipeline
+├── requirements.txt            ← Pinned exact versions
+├── README.md
+│
+├── .streamlit/
+│   └── config.toml             ← Forces light theme
+│
+├── data/
+│   └── spam_ham_dataset.csv
+│
+├── models/                     ← Generated by train_model.py
+│   ├── spam_classifier.pkl
+│   ├── tfidf_vectorizer.pkl
+│   └── metrics.json
+│
+├── outputs/                    ← Generated by train_model.py
+│   ├── confusion_matrix.png
+│   ├── class_distribution.png
+│   └── model_comparison.png
+│
+└── utils/
+    ├── __init__.py
+    └── preprocessing.py        ← Shared text cleaning + deduplication
+```
+
+> **Note:** The `models/` directory must be populated by running `train_model.py` before launching the app. The pickle files are not committed to version control because they contain binary data tied to the exact scikit-learn version used during training (see `requirements.txt`).
+
+---
+
+## Installation
+
+```bash
+cd spam-email-detector
+pip install -r requirements.txt
+```
+
+---
+
+## Train the Model
+
+```bash
+python train_model.py
+```
+
+This will:
+1. Load and inspect the dataset
+2. **Deduplicate** exact-text duplicates before splitting
+3. Clean and split the data (80/20, stratified)
+4. Fit TF-IDF on training data only
+5. Train all three classifiers
+6. Select the best model by **5-fold cross-validated F1** (training data only)
+7. Re-fit the best model on the full training set
+8. Evaluate on the held-out test set
+9. Save the model and vectoriser to `models/`
+10. Save evaluation plots to `outputs/`
+11. Print a full training summary
+
+---
+
+## Run the Application
+
+```bash
+streamlit run app.py
+```
+
+Open `http://localhost:8501` in a browser.
+
+---
+
+## Model Evaluation
+
+### Why These Metrics?
+
+| Metric | Description |
+|---|---|
+| **CV F1** | 5-fold cross-validated F1 on training data — used for model selection |
+| **Accuracy** | Overall percentage of correct predictions |
+| **Precision** | Of spam predictions, how many were real spam? (low = false positives) |
+| **Recall** | Of real spam emails, how many were caught? (low = false negatives) |
+| **Test F1** | Harmonic mean of Precision and Recall on the held-out test set |
+
+### Why F1 and not Accuracy?
+
+The dataset is imbalanced (~71% ham). Accuracy alone is misleading; a model that predicts "ham" for everything achieves ~71% accuracy with zero spam detection.
+
+### Why CV for Model Selection?
+
+Choosing the best model based on test-set performance and then reporting test-set scores introduces optimistic bias. Cross-validation on training data only keeps the test set truly held-out.
+
+---
+
+## Future Improvements
+
+- Semantic deduplication (remove near-duplicate emails, not just exact matches)
+- Larger, more diverse corpora — include modern phishing/spam samples
+- Email header analysis (sender IP reputation, SPF/DKIM)
+- scikit-learn `Pipeline` wrapping cleaning + TF-IDF + model
+- Ensemble / stacking classifiers
+- Deep learning: LSTM or BERT-based transformer
+- Real inbox integration via IMAP
+- Unit tests (`pytest`) covering prediction, preprocessing, and deduplication
+- Docker containerisation and cloud deployment
